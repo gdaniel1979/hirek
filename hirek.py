@@ -6,6 +6,7 @@
 # =======================================================================================
 
 import os
+import re
 import sys
 import base64
 import time
@@ -20,13 +21,13 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from google.auth.exceptions import RefreshError
 
-BASE_DIR = '/home/gdaniel1979/my_projects/telex'
+BASE_DIR = '/home/gdaniel1979/my_projects/hirek'
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 CREDENTIALS_FILE = '/home/gdaniel1979/auth/client_secret_1073369059368-0kshmclsgvomtsdqoij42tdhe50ct4c4.apps.googleusercontent.com.json'
 TOKEN_FILE = '/home/gdaniel1979/auth/gmail_api_token.json'
 EMAIL_TO = "gdaniel1979@yahoo.com"
 
-# telex.hu topic slug -> title used in the log and in the email (in display order)
+# topic slug -> title used in the log and in the email (in display order)
 TOPICS = {
     "kulfold": "Külföld",
     "belfold": "Belföld",
@@ -63,7 +64,7 @@ def gmail_authenticate():
             return None
         if not sys.stdin.isatty():
             print("Gmail needs a new authorization, which cannot be done from cron. "
-                  f"Run `python3 {BASE_DIR}/telex.py` once from a terminal.")
+                  f"Run `python3 {BASE_DIR}/hirek.py` once from a terminal.")
             return None
         try:
             flow = InstalledAppFlow.from_client_secrets_file(
@@ -105,6 +106,41 @@ if gmail_service is None:
     print("ERROR: Gmail authentication failed. Cannot send emails. Aborting.")
     sys.exit(1)
 print("Gmail authentication OK.")
+
+
+import traceback
+
+
+def notify_failure(reason):
+    """Email a short failure notice, so a missed weekly run does not go unnoticed."""
+    try:
+        body = (f"A heti hírösszefoglaló futása nem sikerült ({datetime.now():%Y-%m-%d %H:%M:%S}).\n\n"
+                f"{reason}\n\nRészletek: {BASE_DIR}/hirek_automation.log")
+        msg = MIMEText(body, 'plain', 'utf-8')
+        msg['to'] = EMAIL_TO
+        msg['subject'] = f"HIBA: heti hírösszefoglaló, {date.today()}"
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        gmail_service.users().messages().send(userId="me", body={'raw': raw}).execute()
+        print("Failure notice sent by email.")
+    except Exception as e:
+        print(f"Could not send the failure notice: {e}")
+
+
+def abort(reason):
+    """Print the reason, send the failure notice and stop."""
+    print(f"ERROR: {reason}")
+    notify_failure(reason)
+    sys.exit(1)
+
+
+def excepthook(exc_type, exc, tb):
+    """Log uncaught exceptions as usual, and also send the failure notice."""
+    sys.__excepthook__(exc_type, exc, tb)
+    last_lines = "".join(traceback.format_exception(exc_type, exc, tb))[-1500:]
+    notify_failure(f"Nem várt hiba:\n\n{last_lines}")
+
+
+sys.excepthook = excepthook
 
 # ---------- Claude (headless Claude Code CLI, billed to the Claude subscription) ----------
 import json
@@ -167,24 +203,32 @@ print("CHECKING CLAUDE")
 try:
     ask_claude("Válaszolj egyetlen szóval: ok", retries=2)
 except RuntimeError as e:
-    print(f"ERROR: {e}\n"
+    abort(f"{e}\n"
           "If this is an authentication error, log in again with `claude auth login` "
-          f"or save a `claude setup-token` token to {CLAUDE_TOKEN_FILE}. Aborting.")
-    sys.exit(1)
+          f"or save a `claude setup-token` token to {CLAUDE_TOKEN_FILE}.")
 print("Claude OK. Proceeding with article collection.\n")
 
 
 # =======================================================================================
-#              SCRAPING ARTICLES
+#              COLLECTING ARTICLES (RSS feeds)
 # =======================================================================================
 
-import re
+import email.utils
+import xml.etree.ElementTree as ET
 import requests
 from bs4 import BeautifulSoup
 
-weeks_back = 1
+# Public RSS feeds per topic. The feeds only hold the latest few days, so the
+# real period is determined from the oldest article that was collected.
+FEEDS = {
+    "kulfold": ["https://hvg.hu/rss/vilag", "https://magyarnarancs.hu/rss/kulfold"],
+    "belfold": ["https://hvg.hu/rss/itthon"],
+    "gazdasag": ["https://hvg.hu/rss/gazdasag"],
+}
+MAX_DAYS_BACK = 7
+
 today = date.today()
-cutoff_date = today - timedelta(weeks=weeks_back)
+cutoff_date = today - timedelta(days=MAX_DAYS_BACK)
 
 print("CLAUDE SETTINGS")
 print(f"Model: {claude_model}")
@@ -192,85 +236,57 @@ print()
 print("COLLECTING ARTICLES")
 
 http = requests.Session()
-DATE_IN_URL = re.compile(r"/(\d{4})/(\d{2})/(\d{2})/")
 
 
-def scrape_topic(rovat_url, cutoff_date):
-    """Download articles of a given topic until cutoff_date."""
-    base_url = f"https://telex.hu/rovat/{rovat_url}?oldal="
-    page = 1
-    articles = []
-    seen_hrefs = set()
+def fetch_feed(url):
+    """Download one RSS feed and return its items as (date, title, lead, link) tuples."""
+    response = http.get(url, timeout=30)
+    response.raise_for_status()
+    items = []
+    for item in ET.fromstring(response.content).iter("item"):
+        link = (item.findtext("link") or "").strip()
+        title = (item.findtext("title") or "").strip()
+        description = item.findtext("description") or ""
+        pub_date = item.findtext("pubDate")
+        if not (link and title and pub_date):
+            continue
+        published = email.utils.parsedate_to_datetime(pub_date).astimezone().date()
+        # Some feeds put HTML into the description
+        lead = BeautifulSoup(description, "html.parser").get_text(" ", strip=True)
+        items.append((published, title, lead, link))
+    return items
 
-    while True:
-        response = http.get(base_url + str(page), timeout=30)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
 
-        regular_items = soup.select("div.list__item.list__item--article")
-        highlight_items = soup.select("div.list__highlight__item") if page == 1 else []
-
-        if not regular_items and not highlight_items:
-            break
-
-        page_has_valid_articles = False
-
-        for item in regular_items + highlight_items:
-            is_highlight = "list__highlight__item" in (item.get("class") or [])
-
-            if is_highlight:
-                title_tag = item.select_one(".list__highlight__item__title")
-                lead_tag = item.select_one(".list__highlight__item__lead")
-                url_tag = item.find("a", href=True)
-            else:
-                title_tag = item.select_one("a.list__item__title")
-                lead_tag = item.select_one("div.list__item__lead")
-                url_tag = item.select_one("a.list__item__title")
-
-            if not url_tag or not url_tag.has_attr("href"):
-                continue
-            href = url_tag["href"]
-            regex_date = DATE_IN_URL.search(href)
-            if not regex_date:
-                continue
-
-            article_date = date(*map(int, regex_date.groups()))
-            if article_date < cutoff_date:
-                continue
-
-            if not is_highlight:
-                page_has_valid_articles = True
-
-            if href in seen_hrefs:
-                continue
-
-            title = title_tag.get_text(" ", strip=True) if title_tag else ""
-            lead = lead_tag.get_text(" ", strip=True) if lead_tag else ""
-            if title and lead:
-                seen_hrefs.add(href)
-                articles.append({
-                    "date": article_date.isoformat(),
-                    "title": title,
-                    "lead": lead
-                })
-
-        if not page_has_valid_articles:
-            break
-
-        page += 1
-
-    return articles
+def collect_topic(rovat_url):
+    """Collect the articles of a topic from all of its feeds, newest first."""
+    articles = {}
+    for url in FEEDS[rovat_url]:
+        try:
+            items = fetch_feed(url)
+        except Exception as e:
+            print(f"⚠️  Feed failed, skipping: {url} ({e})")
+            continue
+        for published, title, lead, link in items:
+            if published >= cutoff_date and lead and link not in articles:
+                articles[link] = {"date": published.isoformat(), "title": title, "lead": lead}
+    return sorted(articles.values(), key=lambda a: a["date"], reverse=True)
 
 
 scrapelt_cikkek = {}
 for rovat_url, title in TOPICS.items():
-    scrapelt_cikkek[rovat_url] = scrape_topic(rovat_url, cutoff_date)
+    scrapelt_cikkek[rovat_url] = collect_topic(rovat_url)
     print(f"✅ {len(scrapelt_cikkek[rovat_url])} articles collected in the topic '{title.lower()}'. ({today})")
 
 if not any(scrapelt_cikkek.values()):
-    print("\nERROR: No articles collected for any topic. "
-          "The telex.hu page structure may have changed again. Aborting.")
-    sys.exit(1)
+    abort("No articles collected for any topic. The RSS feeds may have changed or be unavailable.")
+
+# Days covered per topic (the feeds of different topics reach back differently)
+days_back = {}
+for rovat_url, title in TOPICS.items():
+    if scrapelt_cikkek[rovat_url]:
+        oldest = min(a["date"] for a in scrapelt_cikkek[rovat_url])
+        days_back[rovat_url] = max((today - date.fromisoformat(oldest)).days, 1)
+        print(f"Period covered in '{title.lower()}': {oldest} - {today} ({days_back[rovat_url]} days)")
 
 
 # =======================================================================================
@@ -300,15 +316,15 @@ def count_usage(usage):
     total_completion_tokens += usage.get("output_tokens", 0)
 
 
-def fill_template(template):
+def fill_template(template, rovat_url):
     return (template
             .replace("({{TODAY}})", today_str)
-            .replace("({{WEEKSBACK}})", str(weeks_back)))
+            .replace("({{DAYSBACK}})", str(days_back[rovat_url])))
 
 
 def build_batch_prompts(articles, rovat_url):
     """Split the articles into batches and return one prompt per batch."""
-    template = fill_template(prompts[rovat_url]["batch_prompt"])
+    template = fill_template(prompts[rovat_url]["batch_prompt"], rovat_url)
     batch_prompts = []
     for i in range(0, len(articles), batch_size):
         batch_text = ""
@@ -339,7 +355,7 @@ with ThreadPoolExecutor(max_workers=claude_workers) as pool:
             summaries[rovat_url].append(text)
 
         if summaries[rovat_url]:
-            final_prompt = (fill_template(prompts[rovat_url]["final_prompt"])
+            final_prompt = (fill_template(prompts[rovat_url]["final_prompt"], rovat_url)
                             + "\n\n" + "\n\n".join(summaries[rovat_url]))
             final_futures[rovat_url] = pool.submit(ask_claude, final_prompt)
         else:

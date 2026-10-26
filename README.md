@@ -1,33 +1,34 @@
-# Telex News Scraper & Analyzer
+# Hírek – Weekly News Digest
 
-This project scrapes articles from the Hungarian news portal **[telex.hu](https://telex.hu/)**, analyzes them with **Claude** (through the Claude Code CLI, using a Claude subscription), generates **summaries and word clouds**, and finally sends **weekly news reports via Gmail**.  
+This project collects articles from the public RSS feeds of independent Hungarian news outlets (**[HVG](https://hvg.hu/)** and **[Magyar Narancs](https://magyarnarancs.hu/)**), analyzes them with **Claude** (through the Claude Code CLI, using a Claude subscription), generates **summaries and word clouds**, and finally sends **weekly news reports via Gmail**.  
 The workflow is automated with a **Bash script** and can be scheduled with `cron`.
 
 ---
 
 ## Features
 
-- **Web scraping**: Collects recent articles from Telex in three categories:
-  - ```🇭🇺``` Belföld (Domestic)
-  - 🌍 Külföld (Foreign)
-  - 💰 Gazdaság (Economy)
+- **RSS collection**: Collects the latest articles from public RSS feeds in three categories (the feeds reach back 3–5 days, the covered period is detected automatically):
+  - ```🇭🇺``` Belföld (Domestic): HVG
+  - 🌍 Külföld (Foreign): HVG, Magyar Narancs
+  - 💰 Gazdaság (Economy): HVG
 - **AI-based text analysis**: Sends batches of articles to Claude (`sonnet` by default) via `claude -p` and produces a final summary per topic. Usage is billed to the Claude subscription, not to API credits.
 - **Batch Processing:** Handles article batches to respect token limits.  
 - **WordCloud visualization**: Generates word cloud images from summaries for each topic.
 - **Automated email reports**: Sends one combined email with the summaries and embedded word clouds via Gmail API.
-- **Pre-flight checks**: Verifies Gmail and Claude authentication before scraping, and aborts early with a clear message if either fails.
+- **Pre-flight checks**: Verifies Gmail and Claude authentication before collecting articles, and aborts early with a clear message if either fails.
+- **Failure notice**: If a run fails, a short error email is sent so a missed digest does not go unnoticed.
 - **Usage tracking**: Logs Claude token usage per run.
-- **Automation**: `telex_automation.sh` runs the script from cron and writes the log.
+- **Automation**: `hirek_automation.sh` runs the script from cron and writes the log.
 
 ---
 
 ## Project Structure
 
-- ```telex.py``` -> Main Python script (scraping, analysis, wordcloud, email)
-- ```telex_automation.sh``` -> Bash automation script (logging)
+- ```hirek.py``` -> Main Python script (RSS collection, analysis, wordcloud, email)
+- ```hirek_automation.sh``` -> Bash automation script (logging)
 - ```prompts.yaml``` -> External YAML file with prompt templates
 - ```hungarian_stopwords.txt``` -> Custom Hungarian stopword list (used in WordCloud)
-- ```telex_automation.log``` -> Run logs (with tokens and timestamps)
+- ```hirek_automation.log``` -> Run logs (with tokens and timestamps)
 
 ---
 
@@ -58,14 +59,14 @@ On the first run, the script will ask for an authentication code. After fisrt ru
 ## Usage
 Automation with script:
 ```
-telex_automation.sh
+hirek_automation.sh
 ```
 This will:
-- run ```telex.py```
-- save logs to ```telex_automation.log``` (newest entry on top)
+- run ```hirek.py```
+- save logs to ```hirek_automation.log``` (newest entry on top)
 
 **Cron job** runs every Sunday at 23:00 PM:
-```0 23 * * 0 /home/gdaniel1979/my_projects/telex/telex_automation.sh```
+```0 23 * * 0 /home/gdaniel1979/my_projects/hirek/hirek_automation.sh```
 
 ---
 
@@ -74,7 +75,7 @@ Each run logs:
 - Start/end time
 - Duration
 - Token usage (prompt & completion)
-Example (```telex_automation.log```):
+Example (```hirek_automation.log```):
 
 ```yaml
 RUN SUMMARY
@@ -87,10 +88,10 @@ Total tokens used: 102128 (prompt: 66772, completion: 35356)
 ---
 
 ## Customization
-- **Change topics**: Modify ```topics``` in ```telex.py```.
+- **Change topics**: Modify ```TOPICS``` and ```FEEDS``` in ```hirek.py```.
 - **Update prompts**: Edit ```prompts.yaml``` to refine the summaries.
-- **Model selection**: Change ```claude_model``` in ```telex.py``` (e.g. ```sonnet```, ```haiku```, ```opus```).
-- **Batch size**: Change ```batch_size``` in ```telex.py``` (default 25 articles per request).
+- **Model selection**: Change ```claude_model``` in ```hirek.py``` (e.g. ```sonnet```, ```haiku```, ```opus```).
+- **Batch size**: Change ```batch_size``` in ```hirek.py``` (default 25 articles per request).
 - **Stopwords**: Extend ```hungarian_stopwords.txt``` for better WordCloud filtering.
 
 ---
@@ -115,4 +116,4 @@ Body (for Külföld, Belföld and Gazdaság):
 
 ## License
 This project is for personal and educational use only.
-Not affiliated with Telex.hu.
+Not affiliated with the news outlets whose RSS feeds are used.

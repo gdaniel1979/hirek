@@ -2,39 +2,39 @@
 
 kulfold:
   batch_prompt: |
-    Az alábbi híreket ({{TODAY}}) és innen visszamenőleg ({{WEEKSBACK}}) hét cikkeinek a címét és bevezetőjét olvasd el, és adj összefoglalást a cikkekről.
+    Az alábbi híreket ({{TODAY}}) és innen visszamenőleg ({{DAYSBACK}}) nap cikkeinek a címét és bevezetőjét olvasd el, és adj összefoglalást a cikkekről.
 
   final_prompt: |
     Itt vannak az előzetes részösszefoglalók különböző hírekből, amelyeknek a szerkezete:
     Ezek alapján készíts egy átfogó összefoglalást.
     Írd meg az összefoglaló elején, hogy mely időintervallumról szólnak a cikkek.
-    A hírek ({{TODAY}}) és innen visszamenőleg ({{WEEKSBACK}}) hétről szólnak.
+    A hírek ({{TODAY}}) és innen visszamenőleg ({{DAYSBACK}}) napról szólnak.
     A cél, hogy a felhasználó, akihez nem jutottak el a hírek az elmúlt időszakból, átfogó és részletes képet kapjon a történésekről.
     Az összefoglalás elkészítése előtt, közben és utána ne adj tanácsokat abban, hogy milyen módon lehet a kimenetet fejleszteni, kommentárt és kérdéseket se fűzz hozzá.
     Csak a tiszta összefoglalásra van szükségem.
         
 belfold:
   batch_prompt: |
-    Az alábbi híreket ({{TODAY}}) és innen visszamenőleg ({{WEEKSBACK}}) hét cikkeinek a címét és bevezetőjét olvasd el, és adj összefoglalást a cikkekről.
+    Az alábbi híreket ({{TODAY}}) és innen visszamenőleg ({{DAYSBACK}}) nap cikkeinek a címét és bevezetőjét olvasd el, és adj összefoglalást a cikkekről.
 
   final_prompt: |
     Itt vannak az előzetes részösszefoglalók különböző hírekből, amelyeknek a szerkezete:
     Ezek alapján készíts egy átfogó összefoglalást.
     Írd meg az összefoglaló elején, hogy mely időintervallumról szólnak a cikkek.
-    A hírek ({{TODAY}}) és innen visszamenőleg ({{WEEKSBACK}}) hétről szólnak.
+    A hírek ({{TODAY}}) és innen visszamenőleg ({{DAYSBACK}}) napról szólnak.
     A cél, hogy a felhasználó, akihez nem jutottak el a hírek az elmúlt időszakból, átfogó és részletes képet kapjon a történésekről.
     Az összefoglalás elkészítése előtt, közben és utána ne adj tanácsokat abban, hogy milyen módon lehet a kimenetet fejleszteni, kommentárt és kérdéseket se fűzz hozzá.
     Csak a tiszta összefoglalásra van szükségem.
 
 gazdasag:
   batch_prompt: |
-    Az alábbi híreket ({{TODAY}}) és innen visszamenőleg ({{WEEKSBACK}}) hét cikkeinek a címét és bevezetőjét olvasd el, és adj összefoglalást a cikkekről.
+    Az alábbi híreket ({{TODAY}}) és innen visszamenőleg ({{DAYSBACK}}) nap cikkeinek a címét és bevezetőjét olvasd el, és adj összefoglalást a cikkekről.
 
   final_prompt: |
     Itt vannak az előzetes részösszefoglalók különböző hírekből, amelyeknek a szerkezete:
     Ezek alapján készíts egy átfogó összefoglalást.
     Írd meg az összefoglaló elején, hogy mely időintervallumról szólnak a cikkek.
-    A hírek ({{TODAY}}) és innen visszamenőleg ({{WEEKSBACK}}) hétről szólnak.
+    A hírek ({{TODAY}}) és innen visszamenőleg ({{DAYSBACK}}) napról szólnak.
     A cél, hogy a felhasználó, akihez nem jutottak el a hírek az elmúlt időszakból, átfogó és részletes képet kapjon a történésekről.
     Az összefoglalás elkészítése előtt, közben és utána ne adj tanácsokat abban, hogy milyen módon lehet a kimenetet fejleszteni, kommentárt és kérdéseket se fűzz hozzá.
     Csak a tiszta összefoglalásra van szükségem.
